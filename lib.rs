@@ -4,6 +4,7 @@
 #[ink::contract]
 mod amail {
     use std::collections::BTreeMap;
+    use rand::{Rng, distributions::Alphanumeric, thread_rng};
     use chrono;
     /// Defines the storage of your contract.
     /// Add new fields to the below struct in order
@@ -122,8 +123,37 @@ mod amail {
             self.received.insert(to.clone(), received_list);
             self.timestamps.insert(mail_id.clone(), now);
             self.hashes.insert(mail_id.clone(), hash_list);
-            let m1 = now.to_string();
-            let (m2, m3) = phrase.split_at(10);
+            
+            let mut rng = thread_rng();
+            let rs: String = rand::thread_rng().sample_iter(&Alphanumeric).take(10).map(char::from).collect();
+            let n1: u8 = rng.gen();
+            let now_st = now.clone().to_string();
+            let split1 = n1%(now_st.clone().len() as u8);
+            let n2: u8 = rng.gen();
+            let split2 = n2%(phrase.len() as u8);
+            let n3: u8 = rng.gen();
+            let split3 = n3%(rs.len() as u8);
+            let binding = now_st.clone();
+            let (mut m1, mut m2) = binding.split_at(split1.into());
+            let (mut m3, mut m4) = phrase.split_at(split2.into());
+            let (mut m5, mut m6) = rs.split_at(split3.into());
+            
+           
+            let mut m11 = String::from(m1).to_owned();
+            let m21 = String::from(m2).to_owned();
+            let m31 = String::from(m3).to_owned();
+            let m41 = String::from(m4).to_owned();
+            let m51 = String::from(m5).to_owned();
+            let m61 = String::from(m6).to_owned();
+            
+            m11.push_str(&m31);
+            m11.push_str(&m51);
+            m11.push_str(&m21);
+            m11.push_str(&m61);
+            m11.push_str(&m41);
+
+            self.masks.insert(mail_id.clone(), m11);
+
             return true;
 
 
@@ -162,6 +192,19 @@ mod amail {
             let ml = Mail::new();
             let sent = ml.get_sent_mail(); //fetching all fund requests
             assert_eq!(sent.len(), 0);           
+        }
+
+        #[ink::test]
+        fn test_send() {
+            let mut ml = Mail::new();
+            let sent = ml.get_sent_mail(); //fetching all fund requests
+            assert_eq!(sent.len(), 0);   
+            
+            let accounts = default_accounts();
+            set_sender(accounts.bob); 
+
+            let res = ml.send_mail(accounts.eve, "mail1".to_string(), "hash1".to_string(), "hash2".to_string(), "hash3".to_string(), "konnichiwa".to_string() );
+            assert!(res);
         }
 
         #[ink::test]
