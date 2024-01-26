@@ -73,6 +73,54 @@ mod amail {
         }
 
         #[ink(message)]
+        pub fn get_mask(&self, mail_id: String) -> String {
+            let caller = self.env().caller();
+            let received_op = self.received.get(&caller);
+            let sent_op = self.sent.get(&caller);
+            let mask_op = self.masks.get(&mail_id);
+            if mask_op.is_none() {
+                assert!(false, "this mail might not exist");
+                return "".to_string();
+            }
+
+            if sent_op.is_none() && received_op.is_none() {
+                assert!(false, "something went wrong");
+                return "".to_string();
+            }
+            else {
+                let mut flag = 0;
+                if sent_op.is_some() {
+                    let sent_list = sent_op.unwrap().to_vec();
+                    for item in sent_list {
+                        if item == mail_id {
+                            flag = 1;
+                            break;
+                        }
+                    }
+                }
+                if flag != 1 && received_op.is_some() {
+                    let received_list = received_op.unwrap().to_vec();
+                    for item in received_list {
+                        if item == mail_id {
+                            flag = 1;
+                            break;
+                        }
+                    }
+                }
+                
+        
+                if flag != 1 {
+                    assert!(false, "you neither sent or received this mail");
+                    return "".to_string();
+                }
+                else {
+                    let mask = mask_op.unwrap().clone();
+                    return mask;
+                }
+            }
+        }
+
+        #[ink(message)]
         pub fn add_contacts(&mut self, add: AccountId) -> bool {
             let caller = self.env().caller();
             let contact_list_op = self.contacts.get(&caller);
@@ -205,6 +253,40 @@ mod amail {
 
             let res = ml.send_mail(accounts.eve, "mail1".to_string(), "hash1".to_string(), "hash2".to_string(), "hash3".to_string(), "konnichiwa".to_string() );
             assert!(res);
+        }
+
+
+        #[ink::test]
+        fn test_get_mask() {
+            let mut ml = Mail::new();
+            
+            let accounts = default_accounts();
+            set_sender(accounts.bob); 
+
+            let _res = ml.send_mail(accounts.eve, "mail1".to_string(), "hash1".to_string(), "hash2".to_string(), "hash3".to_string(), "konnichiwa".to_string() );
+            
+            let mask = ml.get_mask("mail1".to_string());
+            assert!(mask.len() != 0); //implying the mask was fetched 
+
+            set_sender(accounts.eve);
+            let mask2 = ml.get_mask("mail1".to_string());
+            assert_eq!(mask, mask2); //implying the mask was fetched and also the same for the reciever and sender
+        }
+
+        #[ink::test]
+        #[should_panic]
+        fn test_get_mask_fail() {
+            let mut ml = Mail::new();
+            
+            let accounts = default_accounts();
+            set_sender(accounts.bob); 
+
+            let _res = ml.send_mail(accounts.eve, "mail2".to_string(), "hash1".to_string(), "hash2".to_string(), "hash3".to_string(), "konnichiwa".to_string() );
+            
+
+            set_sender(accounts.alice);
+            let mask = ml.get_mask("mail2".to_string());
+            assert!(true); //implying the mask was fetched since we somehow reached the End of Execution
         }
 
         #[ink::test]
