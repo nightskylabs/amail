@@ -14,7 +14,7 @@ mod amail {
         sent: BTreeMap<AccountId, Vec<String>>,
         received: BTreeMap<AccountId, Vec<String>>,
         timestamps: BTreeMap<String, i64>,
-        hashes: BTreeMap<String, Vec<String>>,
+        algos: BTreeMap<String, Vec<u8>>,
         masks: BTreeMap<String, String>,
         contacts: BTreeMap<AccountId, Vec<AccountId>>,
     }
@@ -26,7 +26,7 @@ mod amail {
                 sent : BTreeMap::new(),
                 received : BTreeMap::new(),
                 timestamps: BTreeMap::new(),
-                hashes: BTreeMap::new(),
+                algos: BTreeMap::new(),
                 masks: BTreeMap::new(),
                 contacts: BTreeMap::new(),
             }
@@ -72,20 +72,22 @@ mod amail {
             }
         }
 
+
         #[ink(message)]
-        pub fn get_mask(&self, mail_id: String) -> String {
+        pub fn get_algos_and_mask(&self, mail_id: String) -> (String, Vec<u8>) {
             let caller = self.env().caller();
             let received_op = self.received.get(&caller);
             let sent_op = self.sent.get(&caller);
             let mask_op = self.masks.get(&mail_id);
-            if mask_op.is_none() {
+            let algos_op = self.algos.get(&mail_id);
+            if mask_op.is_none() || algos_op.is_none(){
                 assert!(false, "this mail might not exist");
-                return "".to_string();
+                return ("".to_string(), vec![3,3,3]);
             }
 
             if sent_op.is_none() && received_op.is_none() {
                 assert!(false, "something went wrong");
-                return "".to_string();
+                return ("".to_string(), vec![3,3,3]);
             }
             else {
                 let mut flag = 0;
@@ -111,11 +113,12 @@ mod amail {
         
                 if flag != 1 {
                     assert!(false, "you neither sent or received this mail");
-                    return "".to_string();
+                    return ("".to_string(), vec![3,3,3]);
                 }
                 else {
                     let mask = mask_op.unwrap().clone();
-                    return mask;
+                    let algos = algos_op.unwrap().clone().to_vec();
+                    return (mask, algos);
                 }
             }
         }
@@ -137,13 +140,20 @@ mod amail {
         }
 
         #[ink(message)]
-        pub fn send_mail(&mut self, to: AccountId, mail_id: String, hash1: String, hash2: String, hash3: String, phrase: String) -> bool {
+        pub fn send_mail(&mut self, to: AccountId, mail_id: String, phrase: String) -> bool {
             let caller = self.env().caller();
             let now = chrono::offset::Utc::now().timestamp();
-            let hash_list = vec![hash1, hash2, hash3];
+            let mut algo_gen = thread_rng();
+            let mut algo: u8 = algo_gen.gen();
+            let algo1 = algo%3;
+            algo = algo_gen.gen();
+            let algo2 = algo%3;
+            algo = algo_gen.gen();
+            let algo3 = algo%3;
+            let algo_list = vec![algo1, algo2, algo3];
             let mut sent_list: Vec<String>;
             let mut received_list: Vec<String>;
-            if self.timestamps.get(&mail_id).is_some() || self.hashes.get(&mail_id).is_some() || self.masks.get(&mail_id).is_some() {
+            if self.timestamps.get(&mail_id).is_some() || self.algos.get(&mail_id).is_some() || self.masks.get(&mail_id).is_some() {
                 return false;
             }
 
@@ -170,7 +180,7 @@ mod amail {
             self.received.remove(&to);
             self.received.insert(to.clone(), received_list);
             self.timestamps.insert(mail_id.clone(), now);
-            self.hashes.insert(mail_id.clone(), hash_list);
+            self.algos.insert(mail_id.clone(), algo_list);
             
             let mut rng = thread_rng();
             let rs: String = rand::thread_rng().sample_iter(&Alphanumeric).take(10).map(char::from).collect();
@@ -182,9 +192,9 @@ mod amail {
             let n3: u8 = rng.gen();
             let split3 = n3%(rs.len() as u8);
             let binding = now_st.clone();
-            let (mut m1, mut m2) = binding.split_at(split1.into());
-            let (mut m3, mut m4) = phrase.split_at(split2.into());
-            let (mut m5, mut m6) = rs.split_at(split3.into());
+            let (m1, m2) = binding.split_at(split1.into());
+            let (m3, m4) = phrase.split_at(split2.into());
+            let (m5, m6) = rs.split_at(split3.into());
             
            
             let mut m11 = String::from(m1).to_owned();
@@ -251,7 +261,7 @@ mod amail {
             let accounts = default_accounts();
             set_sender(accounts.bob); 
 
-            let res = ml.send_mail(accounts.eve, "mail1".to_string(), "hash1".to_string(), "hash2".to_string(), "hash3".to_string(), "konnichiwa".to_string() );
+            let res = ml.send_mail(accounts.eve, "mail1".to_string(), "konnichiwa".to_string() );
             assert!(res);
         }
 
@@ -263,29 +273,63 @@ mod amail {
             let accounts = default_accounts();
             set_sender(accounts.bob); 
 
-            let _res = ml.send_mail(accounts.eve, "mail1".to_string(), "hash1".to_string(), "hash2".to_string(), "hash3".to_string(), "konnichiwa".to_string() );
+            let _res = ml.send_mail(accounts.eve, "mail1".to_string(), "konnichiwa".to_string() );
             
-            let mask = ml.get_mask("mail1".to_string());
-            assert!(mask.len() != 0); //implying the mask was fetched 
+            let res = ml.get_algos_and_mask("mail1".to_string());
+            let mask1 = res.0;
+            assert!(mask1.len() != 0); //implying the mask was fetched 
 
             set_sender(accounts.eve);
-            let mask2 = ml.get_mask("mail1".to_string());
-            assert_eq!(mask, mask2); //implying the mask was fetched and also the same for the reciever and sender
+            let res2 = ml.get_algos_and_mask("mail1".to_string());
+            let mask2 = res2.0;
+            assert_eq!(mask1, mask2); //implying the mask was fetched and also the same for the reciever and sender
         }
 
         #[ink::test]
         #[should_panic]
-        fn test_get_mask_fail() {
+        fn test_get_algos_mask_fail() {
             let mut ml = Mail::new();
             
             let accounts = default_accounts();
             set_sender(accounts.bob); 
 
-            let _res = ml.send_mail(accounts.eve, "mail2".to_string(), "hash1".to_string(), "hash2".to_string(), "hash3".to_string(), "konnichiwa".to_string() );
+            let _res = ml.send_mail(accounts.eve, "mail2".to_string(), "konnichiwa".to_string() );
             
 
             set_sender(accounts.alice);
-            let mask = ml.get_mask("mail2".to_string());
+            let _res = ml.get_algos_and_mask("mail2".to_string());
+            assert!(true); //implying the mask was fetched since we somehow reached the End of Execution
+        }
+
+        #[ink::test]
+        fn test_get_algos() {
+            let mut ml = Mail::new();
+            
+            let accounts = default_accounts();
+            set_sender(accounts.bob); 
+
+            let _res = ml.send_mail(accounts.eve, "mail2".to_string(), "konnichiwa".to_string() );
+            
+
+            set_sender(accounts.eve);
+            let res = ml.get_algos_and_mask("mail2".to_string());
+            let algos = res.1;
+            assert!(algos[0] + algos[1] + algos[2] <= 6); //implying the mask was fetched since we somehow reached the End of Execution
+        }
+
+        #[ink::test]
+        #[should_panic]
+        fn test_get_algos_fail() {
+            let mut ml = create_contract(1000);
+            
+            let accounts = default_accounts();
+            set_sender(accounts.bob); 
+
+            let _res = ml.send_mail(accounts.eve, "mail2".to_string(), "konnichiwa".to_string() );
+            
+
+            set_sender(accounts.alice);
+            let _res = ml.get_algos_and_mask("mail2".to_string());
             assert!(true); //implying the mask was fetched since we somehow reached the End of Execution
         }
 
