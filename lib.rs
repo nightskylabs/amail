@@ -3,37 +3,38 @@
 
 #[ink::contract]
 mod amail {
-    use std::collections::BTreeMap;
-    use rand::{Rng, distributions::Alphanumeric, thread_rng};
-    use chrono;
+    use ink::storage::Mapping;
+    use ink::prelude::{vec, vec::Vec};
+    use ink::prelude::string::{String, ToString};
     /// Defines the storage of your contract.
     /// Add new fields to the below struct in order
     /// to add new static storage fields to your contract.
     #[ink(storage)]
     pub struct Mail {
-        sent: BTreeMap<AccountId, Vec<String>>,
-        received: BTreeMap<AccountId, Vec<String>>,
-        timestamps: BTreeMap<String, i64>,
-        algos: BTreeMap<String, Vec<u8>>,
-        masks: BTreeMap<String, String>,
-        contacts: BTreeMap<AccountId, Vec<AccountId>>,
+        code: String,
+        sent: Mapping<AccountId, Vec<String>>,
+        received: Mapping<AccountId, Vec<String>>,
+        timestamps: Mapping<String, String>,
+        algos: Mapping<String, Vec<u8>>,
+        masks: Mapping<String, String>,
+        contacts: Mapping<AccountId, Vec<AccountId>>,
     }
 
     impl Mail {
         #[ink(constructor)]
         pub fn new() -> Self {
             Self {
-                sent : BTreeMap::new(),
-                received : BTreeMap::new(),
-                timestamps: BTreeMap::new(),
-                algos: BTreeMap::new(),
-                masks: BTreeMap::new(),
-                contacts: BTreeMap::new(),
+                code: "nonceecnon".to_string(),
+                sent : Mapping::default(),
+                received : Mapping::default(),
+                timestamps: Mapping::default(),
+                algos: Mapping::default(),
+                masks: Mapping::default(),
+                contacts: Mapping::default(),
             }
         }
 
         
-
         
 
         #[ink(message)]
@@ -134,23 +135,15 @@ mod amail {
                 let mut contact_list = contact_list_op.unwrap().clone().to_vec();
                 contact_list.push(add);
                 self.contacts.remove(&caller);
-                self.contacts.insert(caller.clone(), contact_list);
+                self.contacts.insert(caller.clone(), &contact_list);
                 return true;
             }
         }
 
         #[ink(message)]
-        pub fn send_mail(&mut self, to: AccountId, mail_id: String, phrase: String) -> bool {
+        pub fn send_mail(&mut self, to: AccountId, mail_id: String, phrase: String, now: String) -> bool {
             let caller = self.env().caller();
-            let now = chrono::offset::Utc::now().timestamp();
-            let mut algo_gen = thread_rng();
-            let mut algo: u8 = algo_gen.gen();
-            let algo1 = algo%3;
-            algo = algo_gen.gen();
-            let algo2 = algo%3;
-            algo = algo_gen.gen();
-            let algo3 = algo%3;
-            let algo_list = vec![algo1, algo2, algo3];
+            
             let mut sent_list: Vec<String>;
             let mut received_list: Vec<String>;
             if self.timestamps.get(&mail_id).is_some() || self.algos.get(&mail_id).is_some() || self.masks.get(&mail_id).is_some() {
@@ -175,21 +168,28 @@ mod amail {
                 received_list = self.received.get(&to).unwrap().clone().to_vec();
                 received_list.push(mail_id.clone());
             }
+
+            let algo_gen = phrase.as_bytes();
+            let algo1 = algo_gen[0]%3;
+            let algo2 = algo_gen[algo_gen.len()/2]%3;
+            let algo3 = algo_gen[algo_gen.len() - 1]%3;
+            let n1 = algo_gen[1];
+            let n2 = algo_gen[algo_gen.len()/2 + 1];
+            let n3 = algo_gen[algo_gen.len() - 2];
+            let algo_list = vec![algo1, algo2, algo3];
+
             self.sent.remove(&caller);
-            self.sent.insert(caller.clone(), sent_list);
+            self.sent.insert(caller.clone(), &sent_list);
             self.received.remove(&to);
-            self.received.insert(to.clone(), received_list);
-            self.timestamps.insert(mail_id.clone(), now);
-            self.algos.insert(mail_id.clone(), algo_list);
+            self.received.insert(to.clone(), &received_list);
+            self.timestamps.insert(mail_id.clone(), &now);
+            self.algos.insert(mail_id.clone(), &algo_list);
             
-            let mut rng = thread_rng();
-            let rs: String = rand::thread_rng().sample_iter(&Alphanumeric).take(10).map(char::from).collect();
-            let n1: u8 = rng.gen();
+            let rs = &self.code;
+            
             let now_st = now.clone().to_string();
             let split1 = n1%(now_st.clone().len() as u8);
-            let n2: u8 = rng.gen();
             let split2 = n2%(phrase.len() as u8);
-            let n3: u8 = rng.gen();
             let split3 = n3%(rs.len() as u8);
             let binding = now_st.clone();
             let (m1, m2) = binding.split_at(split1.into());
@@ -197,12 +197,12 @@ mod amail {
             let (m5, m6) = rs.split_at(split3.into());
             
            
-            let mut m11 = String::from(m1).to_owned();
-            let m21 = String::from(m2).to_owned();
-            let m31 = String::from(m3).to_owned();
-            let m41 = String::from(m4).to_owned();
-            let m51 = String::from(m5).to_owned();
-            let m61 = String::from(m6).to_owned();
+            let mut m11 = String::from(m1);
+            let m21 = String::from(m2);
+            let m31 = String::from(m3);
+            let m41 = String::from(m4);
+            let m51 = String::from(m5);
+            let m61 = String::from(m6);
             
             m11.push_str(&m31);
             m11.push_str(&m51);
@@ -210,7 +210,20 @@ mod amail {
             m11.push_str(&m61);
             m11.push_str(&m41);
 
-            self.masks.insert(mail_id.clone(), m11);
+            self.masks.insert(mail_id.clone(), &m11);
+
+            let (_x, new_code1) = rs.split_at(rs.len()/2);
+            let mut m71 = String::from(new_code1);
+            m71.push_str(&m41);
+            m71.retain(|c| !c.is_whitespace());
+            if m71.len() > 50 {
+                let (_y, new_m71) = m71.split_at(49);
+                self.code = String::from(new_m71);
+            }
+            else {
+                self.code = m71;
+            }
+            
 
             return true;
 
@@ -243,7 +256,6 @@ mod amail {
     mod tests {
         /// Imports all the definitions from the outer scope so we can use them here.
         use super::*;
-        //use chrono;
         
         #[ink::test]
         fn test_init() {
@@ -261,7 +273,7 @@ mod amail {
             let accounts = default_accounts();
             set_sender(accounts.bob); 
 
-            let res = ml.send_mail(accounts.eve, "mail1".to_string(), "konnichiwa".to_string() );
+            let res = ml.send_mail(accounts.eve, "mail1".to_string(), "konnichiwa".to_string(), "112377564".to_string());
             assert!(res);
         }
 
@@ -273,7 +285,7 @@ mod amail {
             let accounts = default_accounts();
             set_sender(accounts.bob); 
 
-            let _res = ml.send_mail(accounts.eve, "mail1".to_string(), "konnichiwa".to_string() );
+            let _res = ml.send_mail(accounts.eve, "mail1".to_string(), "konnichiwa".to_string(), "112377564".to_string());
             
             let res = ml.get_algos_and_mask("mail1".to_string());
             let mask1 = res.0;
@@ -293,7 +305,7 @@ mod amail {
             let accounts = default_accounts();
             set_sender(accounts.bob); 
 
-            let _res = ml.send_mail(accounts.eve, "mail2".to_string(), "konnichiwa".to_string() );
+            let _res = ml.send_mail(accounts.eve, "mail2".to_string(), "konnichiwa".to_string(), "112377564".to_string());
             
 
             set_sender(accounts.alice);
@@ -308,7 +320,7 @@ mod amail {
             let accounts = default_accounts();
             set_sender(accounts.bob); 
 
-            let _res = ml.send_mail(accounts.eve, "mail2".to_string(), "konnichiwa".to_string() );
+            let _res = ml.send_mail(accounts.eve, "mail2".to_string(), "konnichiwa".to_string(), "112377564".to_string());
             
 
             set_sender(accounts.eve);
@@ -325,13 +337,15 @@ mod amail {
             let accounts = default_accounts();
             set_sender(accounts.bob); 
 
-            let _res = ml.send_mail(accounts.eve, "mail2".to_string(), "konnichiwa".to_string() );
+            let _res = ml.send_mail(accounts.eve, "mail2".to_string(), "konnichiwa".to_string(), "112377564".to_string());
             
 
             set_sender(accounts.alice);
             let _res = ml.get_algos_and_mask("mail2".to_string());
             assert!(true); //implying the mask was fetched since we somehow reached the End of Execution
         }
+
+       
 
         #[ink::test]
         fn test_tip() {
