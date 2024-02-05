@@ -14,7 +14,7 @@ mod amail {
         code: String,
         sent: Mapping<AccountId, Vec<String>>,
         received: Mapping<AccountId, Vec<String>>,
-        timestamps: Mapping<String, String>,
+        timestamps: Mapping<String, u64>,
         algos: Mapping<String, Vec<u8>>,
         masks: Mapping<String, String>,
         contacts: Mapping<AccountId, Vec<AccountId>>,
@@ -141,7 +141,7 @@ mod amail {
         }
 
         #[ink(message)]
-        pub fn send_mail(&mut self, to: AccountId, mail_id: String, phrase: String, now: String) -> bool {
+        pub fn send_mail(&mut self, to: AccountId, mail_id: String, phrase: String) -> bool {
             let caller = self.env().caller();
             
             let mut sent_list: Vec<String>;
@@ -182,6 +182,8 @@ mod amail {
             self.sent.insert(caller.clone(), &sent_list);
             self.received.remove(&to);
             self.received.insert(to.clone(), &received_list);
+
+            let now = self.env().block_timestamp();
             self.timestamps.insert(mail_id.clone(), &now);
             self.algos.insert(mail_id.clone(), &algo_list);
             
@@ -273,7 +275,7 @@ mod amail {
             let accounts = default_accounts();
             set_sender(accounts.bob); 
 
-            let res = ml.send_mail(accounts.eve, "mail1".to_string(), "konnichiwa".to_string(), "112377564".to_string());
+            let res = ml.send_mail(accounts.eve, "mail1".to_string(), "konnichiwa".to_string());
             assert!(res);
         }
 
@@ -285,7 +287,7 @@ mod amail {
             let accounts = default_accounts();
             set_sender(accounts.bob); 
 
-            let _res = ml.send_mail(accounts.eve, "mail1".to_string(), "konnichiwa".to_string(), "112377564".to_string());
+            let _res = ml.send_mail(accounts.eve, "mail1".to_string(), "konnichiwa".to_string());
             
             let res = ml.get_algos_and_mask("mail1".to_string());
             let mask1 = res.0;
@@ -305,7 +307,7 @@ mod amail {
             let accounts = default_accounts();
             set_sender(accounts.bob); 
 
-            let _res = ml.send_mail(accounts.eve, "mail2".to_string(), "konnichiwa".to_string(), "112377564".to_string());
+            let _res = ml.send_mail(accounts.eve, "mail2".to_string(), "konnichiwa".to_string());
             
 
             set_sender(accounts.alice);
@@ -320,7 +322,7 @@ mod amail {
             let accounts = default_accounts();
             set_sender(accounts.bob); 
 
-            let _res = ml.send_mail(accounts.eve, "mail2".to_string(), "konnichiwa".to_string(), "112377564".to_string());
+            let _res = ml.send_mail(accounts.eve, "mail2".to_string(), "konnichiwa".to_string());
             
 
             set_sender(accounts.eve);
@@ -337,7 +339,7 @@ mod amail {
             let accounts = default_accounts();
             set_sender(accounts.bob); 
 
-            let _res = ml.send_mail(accounts.eve, "mail2".to_string(), "konnichiwa".to_string(), "112377564".to_string());
+            let _res = ml.send_mail(accounts.eve, "mail2".to_string(), "konnichiwa".to_string());
             
 
             set_sender(accounts.alice);
