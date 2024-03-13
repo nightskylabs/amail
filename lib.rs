@@ -129,7 +129,10 @@ mod amail {
             let caller = self.env().caller();
             let contact_list_op = self.contacts.get(&caller);
             if contact_list_op.is_none() {
-                return false;
+                let mut contact_list = Vec::new();
+                contact_list.push(add);
+                self.contacts.insert(caller.clone(), &contact_list);
+                return true;
             }
             else {
                 let mut contact_list = contact_list_op.unwrap().clone().to_vec();
